@@ -12,54 +12,8 @@
 #include <pthread.h>
 #endif
 
-#define DEFAULTTHREADNUMBER 2
-#define DEFAULTBUFFERSIZE IVSIZE
+#define DEFAULTBUFFERSIZE 64
 #define DEFAULTMUTATIONINTERVAL IVSIZE
-
-//TODO workaround
-#define threadCountInt DEFAULTTHREADNUMBER
-
-//#define NDEBUG
-
-#ifdef MULTICORE
-typedef struct
-{
-	char* data;
-	unsigned int dataOffset;
-	unsigned int dataLength;
-	bool encode;
-	Ring* ring;
-	pthread_mutex_t* threadWait;
-	pthread_mutex_t* mainWait;
-	unsigned int id;
-} ThreadArguments;
-
-void* threadedJob(void* threadArgument)
-{
-	pthread_mutex_t* threadWait = ((ThreadArguments*)threadArgument)->threadWait;
-	pthread_mutex_t* mainWait = ((ThreadArguments*)threadArgument)->mainWait;
-	unsigned int id = ((ThreadArguments*)threadArgument)->id;
-	while (true)
-	{
-		pthread_mutex_lock(threadWait);
-		char* data = ((ThreadArguments*)threadArgument)->data;
-		unsigned int dataOffset = ((ThreadArguments*)threadArgument)->dataOffset;
-		unsigned int dataLength = ((ThreadArguments*)threadArgument)->dataLength;
-		bool encode = ((ThreadArguments*)threadArgument)->encode;
-		Ring* ring = ((ThreadArguments*)threadArgument)->ring;
-		if (encode)
-		{
-			ring->encode((unsigned char*)(data+dataOffset), dataLength, dataOffset);
-		}
-		else
-		{
-			ring->decode((unsigned char*)(data+dataOffset), dataLength, dataOffset);
-		}
-		pthread_mutex_unlock(mainWait);
-	}
-	pthread_exit(NULL);
-}
-#endif
 
 int main(int argc, char* argv[])
 {
@@ -70,8 +24,6 @@ int main(int argc, char* argv[])
 	char mutationInterval[4+1];
 	char buffer[6+1];
 	char keyFile[256+1];
-	char threadCount[1+1];
-	bool threadCountSet = false;
 	bool inputSet = false;
 	bool outputSet = false;
 	bool keySet = false;
@@ -84,19 +36,6 @@ int main(int argc, char* argv[])
 	bool removeSet = false;
 	for (int i=0; i<argc; i++)//collect arguments from cmdline
 	{
-		if (strcmp(argv[i], "-cpucount") == 0 || strcmp(argv[i], "-c") == 0)
-		{
-			i++;
-			if (i < argc)
-			{
-				if (strlen(argv[i]) <= 1)
-				{
-					strcpy(threadCount, argv[i]);
-					threadCountSet = true;
-				}
-			}
-			continue;
-		}
 		if (strcmp(argv[i], "-in") == 0 || strcmp(argv[i], "-i") == 0)
 		{
 			i++;
@@ -263,10 +202,6 @@ int main(int argc, char* argv[])
 	}
 
 	//evaluate arguments
-	if (!threadCountSet)
-	{
-		sprintf(threadCount, "%u", DEFAULTTHREADNUMBER);
-	}
 	if (!inputSet)
 	{
 		printf("You need to specify an inputfile!\n");
@@ -372,8 +307,6 @@ int main(int argc, char* argv[])
 	}
 	unsigned int bufferInt = atoi(buffer);
 	unsigned int mutationIntervalInt = atoi(mutationInterval);
-	//unsigned int threadCountInt = atoi(threadCount);//TODO workaround
-assert(threadCountInt==1 || threadCountInt==2 || threadCountInt==4 || threadCountInt==8);
 	FILE* in = fopen(inputFile, "r");
 	if (!in)
 	{
@@ -427,48 +360,6 @@ assert(threadCountInt==1 || threadCountInt==2 || threadCountInt==4 || threadCoun
 	char buf[bufferInt];
 	char verboseMessage[1+8+1+6+1];
 
-#ifdef MULTICORE
-	//thread setup
-	pthread_t threads[threadCountInt];
-	ThreadArguments ta[threadCountInt];
-	char buf2[bufferInt];
-#ifndef NDEBUG
-	assert(IVSIZE%threadCountInt == 0);
-	assert(mutationIntervalInt%bufferInt == 0);
-#endif
-	pthread_mutex_t threadWait[threadCountInt];
-	pthread_mutex_t mainWait[threadCountInt];
-	pthread_attr_t threadAttributes[threadCountInt];
-	for (unsigned int i=0; i<threadCountInt; i++)
-	{
-		//dummy, inited in mainloop
-		ta[i].data = NULL;
-		ta[i].dataOffset = 0;
-		ta[i].dataLength = 0;
-		//real
-		pthread_mutex_init(&threadWait[i], NULL);
-		pthread_mutex_lock(&threadWait[i]);
-		pthread_mutex_init(&mainWait[i], NULL);
-		ta[i].threadWait = &threadWait[i];
-		ta[i].mainWait = &mainWait[i];
-		ta[i].encode = encode;
-		ta[i].id = i;
-		ta[i].ring = &ring;
-		if (int ret = pthread_attr_setstacksize(&threadAttributes[i], 1024*1024*8))
-		{
-			errno = ret;
-			perror("ERROR: could not set stacksize");
-			return ret;
-		}
-		if (int ret = pthread_create(&threads[i], &threadAttributes[i], threadedJob, (void*)&ta[i]))
-		{
-			errno = ret;
-			perror("ERROR: thread could not be created");
-			return ret;
-		}
-	}
-#endif
-
 	//encode/decode
 	while (readBytes < fileSize)
 	{
@@ -485,7 +376,7 @@ assert(threadCountInt==1 || threadCountInt==2 || threadCountInt==4 || threadCoun
 			}
 			printf("%s", verboseMessage);
 		}
-		//read1
+		//read
 		unsigned int bytesToRead = bufferInt;
 		if (readBytes+bytesToRead > fileSize)
 		{
@@ -496,122 +387,13 @@ assert(threadCountInt==1 || threadCountInt==2 || threadCountInt==4 || threadCoun
 #ifndef NDEBUG
 		assert(readRet == bytesToRead);
 #endif
-#ifdef MULTICORE
-		//init threads1
-		unsigned int assignedData = 0;
-		for (unsigned int i=0; i<threadCountInt; i++)
-		{
-			ta[i].data = buf;
-			ta[i].dataOffset = i*(IVSIZE/threadCountInt);
-			if (assignedData + IVSIZE/threadCountInt <= readRet)
-			{
-				ta[i].dataLength = IVSIZE/threadCountInt;
-			}
-			else
-			{
-				ta[i].dataLength = readRet-assignedData;
-			}
-			assignedData += ta[i].dataLength;
-			pthread_mutex_lock(&mainWait[i]);
-			pthread_mutex_unlock(&threadWait[i]);//start thread i
-		}
-		/*
-		 * threads are working here1
-		 */
-#ifdef MULTICORE2
-		//read2
-		unsigned int bytesToRead2 = bufferInt;
-		if (readBytes+bytesToRead2 > fileSize)
-		{
-			bytesToRead = fileSize - readBytes;
-		}
-		unsigned int readRet2 = fread(&buf2, 1, bytesToRead, in);
-		readBytes += readRet2;
-#ifndef NDEBUG
-		assert(readRet2 == bytesToRead);
-#endif
-#endif
-		for (unsigned int i=0; i<threadCountInt; i++)//wait until all threads have finished theire work
-		{
-			pthread_mutex_lock(&mainWait[i]);//wait for thread i
-			pthread_mutex_unlock(&mainWait[i]);
-		}
-		/*
-		 * threads are not working anylonger1
-		 */
-		if (ring.mutationInterval != 0)
-		{
-			ring.operationsSinceMutation += readRet;
-			if (ring.operationsSinceMutation >= ring.mutationInterval)
-			{
-				ring.shuffle();
-				ring.operationsSinceMutation = 0;
-			}
-		}
-#ifdef MULTICORE2
-		//init threads2
-		assignedData = 0;
-		for (unsigned int i=0; i<threadCountInt; i++)
-		{
-			ta[i].data = buf2;
-			ta[i].dataOffset = i*(IVSIZE/threadCountInt);
-			if (assignedData + IVSIZE/threadCountInt <= readRet2)
-			{
-				ta[i].dataLength = IVSIZE/threadCountInt;
-			}
-			else
-			{
-				ta[i].dataLength = readRet2-assignedData;
-			}
-			assignedData += ta[i].dataLength;
-			pthread_mutex_lock(&mainWait[i]);
-			pthread_mutex_unlock(&threadWait[i]);//start thread i
-		}
-		/*
-		 * threads are working here2
-		 */
-#endif
-		//write1
-		unsigned int writtenBytes = 0;
-		while (writtenBytes < readRet)
-		{
-			unsigned int writeRet = fwrite((&buf)+writtenBytes, 1, readRet, out);
-			writtenBytes += writeRet;
-		}
-#ifdef MULTICORE2
-		for (unsigned int i=0; i<threadCountInt; i++)//wait until all threads have finished theire work
-		{
-			pthread_mutex_lock(&mainWait[i]);//wait for thread i
-			pthread_mutex_unlock(&mainWait[i]);
-		}
-		/*
-		 * threads are not working anylonger2
-		 */
-		if (ring.mutationInterval != 0)
-		{
-			ring.operationsSinceMutation += readRet2;
-			if (ring.operationsSinceMutation >= ring.mutationInterval)
-			{
-				ring.shuffle();
-				ring.operationsSinceMutation = 0;
-			}
-		}
-		//write2
-		writtenBytes = 0;
-		while (writtenBytes < readRet2)
-		{
-			unsigned int writeRet = fwrite((&buf2)+writtenBytes, 1, readRet2, out);
-			writtenBytes += writeRet;
-		}
-#endif
-#else
 		if (encode)
 		{
-			ring.encode((unsigned char*)buf, readRet, 0);
+			ring.encode((unsigned char*)buf, readRet);
 		}
 		else
 		{
-			ring.decode((unsigned char*)buf, readRet, 0);
+			ring.decode((unsigned char*)buf, readRet);
 		}
 		//write
 		unsigned int writtenBytes = 0;
@@ -620,19 +402,9 @@ assert(threadCountInt==1 || threadCountInt==2 || threadCountInt==4 || threadCoun
 			unsigned int writeRet = fwrite((&buf)+writtenBytes, 1, readRet, out);
 			writtenBytes += writeRet;
 		}
-#endif
 	}
 
 	//finishing
-#ifdef MULTICORE
-	for (unsigned int i=0; i<threadCountInt; i++)
-	{
-		pthread_mutex_destroy(&mainWait[i]);
-		pthread_mutex_destroy(&threadWait[i]);
-		pthread_cancel(threads[i]);
-		pthread_attr_destroy(&threadAttributes[i]);
-	}
-#endif
 	if (verbose)
 	{
 		if (encode)

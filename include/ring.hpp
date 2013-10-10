@@ -6,16 +6,11 @@
 #endif
 
 #ifndef IVSIZE
-#define IVSIZE (1024)
+#define IVSIZE (128)
 #endif
 
-#define MULTICORE2
-
-#ifdef MULTICORE2
-#define MULTICORE
-#endif
-
-#define NDEBUG
+//#define KNOWNPLAINTEXTATTACK
+//#define NDEBUG
 
 class Ring
 {
@@ -56,7 +51,7 @@ class Ring
 		 * @pre posIndex < IVSIZE if MULTICORE is defined
 		 * @return encoded character
 		 */
-		unsigned char encode(unsigned char c, unsigned int posIndex);
+		unsigned char encode(unsigned char c);
 		/**
 		 * Decodes a single character.
 		 * @param[in] c character to decode
@@ -64,7 +59,7 @@ class Ring
 		 * @pre posIndex < IVSIZE if MULTICORE is defined
 		 * @return decoded character
 		 */
-		unsigned char decode(unsigned char c, unsigned int posIndex);
+		unsigned char decode(unsigned char c);
 		/**
 		 * Encodes an array of characters inplace.
 		 * @param[in,out] c array of characters to encode
@@ -74,7 +69,7 @@ class Ring
 		 * @pre length > 0
 		 * @post c contains encoded characters
 		 */
-		void encode(unsigned char* c, unsigned int length, unsigned int posIndex);
+		void encode(unsigned char* c, unsigned int length);
 		/**
 		 * Decodes an array of characters inplace.
 		 * @param[in,out] c array of characters to decode
@@ -84,7 +79,7 @@ class Ring
 		 * @pre length > 0
 		 * @post c contains decoded characters
 		 */
-		void decode(unsigned char* c, unsigned int length, unsigned int posIndex);
+		void decode(unsigned char* c, unsigned int length);
 #ifdef MULTICORE
 		/**
 		 * Mutates the map independent from the key.
@@ -94,7 +89,13 @@ class Ring
 		unsigned int mutationInterval;
 		unsigned int operationsSinceMutation;
 #endif
+#ifdef KNOWNPLAINTEXTATTACK
+		unsigned char map[MAPSIZE];
+		unsigned char decodeMap[MAPSIZE];
+		bool mapSpecified[MAPSIZE];
+#endif
 	protected:
+		unsigned char last;
 #ifndef MULTICORE
 		/**
 		 * Mutates the map independent from the key.
@@ -107,17 +108,19 @@ class Ring
 		/**
 		 * Mutates the map depending on the key.
 		 * This method is used to initialise the ring.
-		 * @deprecated This method is only in use for initialisation of the ring. All other muatations are done with shuffle() because this method needs to much time.
+		 * @deprecated This method is only in use for initialisation of the ring. All other mutations are done with shuffle() because this method needs to much time.
 		 */
 		void mutate();
+#ifndef KNOWNPLAINTEXTATTACK
+		unsigned char map[MAPSIZE];
 		unsigned char decodeMap[MAPSIZE];
+#endif
 		unsigned char pos[IVSIZE];
 		unsigned int posLength;
 		unsigned char initPos[IVSIZE];
 		unsigned int actualPos;
 		unsigned char pw[MAPSIZE];
 		unsigned int pwLength;
-		unsigned char map[MAPSIZE];
 	private:
 };
 

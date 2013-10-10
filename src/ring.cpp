@@ -4,6 +4,8 @@
 #include <cassert>
 #endif
 
+#include <cstdio>
+
 Ring::Ring(const unsigned char* c, unsigned int length, const unsigned char* pos, unsigned int posLength, unsigned int mutationInterval)
 {
 #ifndef NDEBUG
@@ -11,9 +13,6 @@ Ring::Ring(const unsigned char* c, unsigned int length, const unsigned char* pos
 	assert(length <= MAPSIZE);
 	assert(posLength > 0);
 	assert(posLength <= IVSIZE);
-#ifndef MULTICORE
-	assert(mutationInterval%IVSIZE == 0);
-#endif
 #endif
 	this->posLength = posLength;
 	for (unsigned int i=0; i<posLength; i++)
@@ -27,6 +26,77 @@ Ring::Ring(const unsigned char* c, unsigned int length, const unsigned char* pos
 	}
 	this->pwLength = length;
 	reinit();
+#ifdef KNOWNPLAINTEXTATTACK
+for (unsigned int i=0; i<256; i++)
+{
+	mapSpecified[i] = true;
+}
+printf("map\n");
+for (int i=0; i<8; i++)
+{
+	for (int j=0; j<4; j++)
+	{
+		for (int k=0; k<8; k++)
+		{
+			if (map[i*4*8*1+j*8+k*1] < 100)
+			{
+				printf("0");
+				if (map[i*4*8*1+j*8+k*1] < 10)
+				{
+					printf("0");
+				}
+			}
+			printf("%u ", map[i*4*8*1+j*8+k*1]);
+		}
+		printf("    ");
+	}
+	printf("\n");
+}
+printf("\n");
+printf("decodemap\n");
+for (int i=0; i<8; i++)
+{
+	for (int j=0; j<4; j++)
+	{
+		for (int k=0; k<8; k++)
+		{
+			if (decodeMap[i*4*8*1+j*8+k*1] < 100)
+			{
+				printf("0");
+				if (decodeMap[i*4*8*1+j*8+k*1] < 10)
+				{
+					printf("0");
+				}
+			}
+			printf("%u ", decodeMap[i*4*8*1+j*8+k*1]);
+		}
+		printf("    ");
+	}
+	printf("\n");
+}
+printf("\n");
+printf("salt\n");
+for (int i=0; i<4; i++)
+{
+	for (int j=0; j<4; j++)
+	{
+		for (int k=0; k<8; k++)
+		{
+			if (pos[i*4*8*1+j*8+k*1] < 100)
+			{
+				printf("0");
+				if (pos[i*4*8*1+j*8+k*1] < 10)
+				{
+					printf("0");
+				}
+			}
+			printf("%u ", pos[i*4*8*1+j*8+k*1]);
+		}
+		printf("    ");
+	}
+	printf("\n");
+}
+#endif
 }
 
 Ring::~Ring()
@@ -35,14 +105,13 @@ Ring::~Ring()
 
 void Ring::reinit()
 {
+	this->last = 0;
 	this->actualPos = 0;
 	for (unsigned int i=0; i<MAPSIZE; i++)
 	{
 		this->map[i] = i;
 	}
-#ifndef MULTICORE
 	this->operationsSinceMutation = 0;
-#endif
 	for (unsigned int i=0; i<posLength; i++)
 	{
 		this->pos[i] = this->initPos[i];
@@ -120,20 +189,16 @@ void Ring::mutate()
 	}
 }
 
-unsigned char Ring::encode(unsigned char c, unsigned int posIndex)
+unsigned char Ring::encode(unsigned char c)
 {
 #ifndef NDEBUG
 	assert(c < MAPSIZE);
-	assert(posIndex < IVSIZE);
 #endif
-#ifndef MULTICORE
-	posIndex = this->actualPos;
+	unsigned int posIndex = this->actualPos;
 	this->actualPos = (posIndex + 1)%this->posLength;
-#endif
-	unsigned int index = (c + this->pos[posIndex])%MAPSIZE;
-	unsigned char ret = this->map[index];
-	this->pos[posIndex] = ((this->pos[posIndex] + 1)^c)%MAPSIZE;
-#ifndef MULTICORE
+	unsigned int index = (c ^ this->pos[posIndex])%MAPSIZE;
+	unsigned char ret = (this->map[index] ^ this->last)%MAPSIZE;
+	this->pos[posIndex] = ret;
 	if (this->mutationInterval != 0)
 	{
 		this->operationsSinceMutation++;
@@ -143,27 +208,25 @@ unsigned char Ring::encode(unsigned char c, unsigned int posIndex)
 			this->operationsSinceMutation = 0;
 		}
 	}
-#endif
+	this->last = c;
 	return ret;
 }
 
-unsigned char Ring::decode(unsigned char c, unsigned int posIndex)
+unsigned char Ring::decode(unsigned char c)
 {
 #ifndef NDEBUG
 	assert(c < MAPSIZE);
-	assert(posIndex < IVSIZE);
 #endif
-#ifndef MULTICORE
-	posIndex = this->actualPos;
+	unsigned int posIndex = this->actualPos;
 	this->actualPos = (posIndex + 1)%this->posLength;
-#endif
-	int ret = decodeMap[c] - this->pos[posIndex];
-	if (ret < 0)
+#ifdef KNOWNPLAINTEXTATTACK
+	if (!mapSpecified[(c ^ this->last)%MAPSIZE])
 	{
-		ret += MAPSIZE;
+		return '?';
 	}
-	this->pos[posIndex] = ((this->pos[posIndex] + 1)^ret)%MAPSIZE;
-#ifndef MULTICORE
+#endif
+	unsigned char ret = (decodeMap[(c ^ this->last)%MAPSIZE] ^ this->pos[posIndex])%MAPSIZE;
+	this->pos[posIndex] = c;
 	if (this->mutationInterval != 0)
 	{
 		this->operationsSinceMutation++;
@@ -173,42 +236,28 @@ unsigned char Ring::decode(unsigned char c, unsigned int posIndex)
 			this->operationsSinceMutation = 0;
 		}
 	}
-#endif
+	this->last = ret;
 	return ret;
 }
 
-void Ring::encode(unsigned char* c, unsigned int length, unsigned int posIndex)
+void Ring::encode(unsigned char* c, unsigned int length)
 {
 #ifndef NDEBUG
 	assert(length > 0);
-#ifdef MULTICORE
-	assert(posIndex < IVSIZE);
-#endif
 #endif
 	for (unsigned int i=0; i<length; i++)
 	{
-#ifdef MULTICORE
-		c[i] = encode(c[i], posIndex+i);
-#else
-		c[i] = encode(c[i], 0);
-#endif
+		c[i] = encode(c[i]);
 	}
 }
 
-void Ring::decode(unsigned char* c, unsigned int length, unsigned int posIndex)
+void Ring::decode(unsigned char* c, unsigned int length)
 {
 #ifndef NDEBUG
 	assert(length > 0);
-#ifdef MULTICORE
-	assert(posIndex < IVSIZE);
-#endif
 #endif
 	for (unsigned int i=0; i<length; i++)
 	{
-#ifdef MULTICORE
-		c[i] = decode(c[i], posIndex+i);
-#else
-		c[i] = decode(c[i], 0);
-#endif
+		c[i] = decode(c[i]);
 	}
 }
