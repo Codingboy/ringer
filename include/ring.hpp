@@ -80,15 +80,6 @@ class Ring
 		 * @post c contains decoded characters
 		 */
 		void decode(unsigned char* c, unsigned int length);
-#ifdef MULTICORE
-		/**
-		 * Mutates the map independent from the key.
-		 * This method is used to mutate the ring after mutationInterval operations.
-		 */
-		void shuffle();
-		unsigned int mutationInterval;
-		unsigned int operationsSinceMutation;
-#endif
 #ifdef KNOWNPLAINTEXTATTACK
 		unsigned char map[MAPSIZE];
 		unsigned char decodeMap[MAPSIZE];
@@ -96,7 +87,6 @@ class Ring
 #endif
 	protected:
 		unsigned char last;
-#ifndef MULTICORE
 		/**
 		 * Mutates the map independent from the key.
 		 * This method is used to mutate the ring after mutationInterval operations.
@@ -104,7 +94,6 @@ class Ring
 		void shuffle();
 		unsigned int mutationInterval;
 		unsigned int operationsSinceMutation;
-#endif
 		/**
 		 * Mutates the map depending on the key.
 		 * This method is used to initialise the ring.
