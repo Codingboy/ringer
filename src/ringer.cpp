@@ -7,13 +7,14 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "ring.hpp"
+#include <cstdint>
 
 #ifdef MULTICORE
 #include <pthread.h>
 #endif
 
-#define DEFAULTBUFFERSIZE 64
-#define DEFAULTMUTATIONINTERVAL IVSIZE
+#define DEFAULTBUFFERSIZE 1024
+#define DEFAULTMUTATIONINTERVAL 16
 
 int main(int argc, char* argv[])
 {
@@ -273,7 +274,7 @@ int main(int argc, char* argv[])
 		}
 		printf("No outputfile specified... using \"%s\".\n", outputFile);
 	}
-	if (!mutationIntervalSet)
+	if (!mutationIntervalSet && encode)
 	{
 		sprintf(mutationInterval, "%u", DEFAULTMUTATIONINTERVAL);
 		printf("No mutationInterval specified... using \"%s\".\n", mutationInterval);
@@ -306,7 +307,7 @@ int main(int argc, char* argv[])
 		printf("Salt generated\n");
 	}
 	unsigned int bufferInt = atoi(buffer);
-	unsigned int mutationIntervalInt = atoi(mutationInterval);
+	unsigned int mutationIntervalInt;
 	FILE* in = fopen(inputFile, "r");
 	if (!in)
 	{
@@ -320,29 +321,6 @@ int main(int argc, char* argv[])
 		fclose(in);
 		return errno;
 	}
-	if (encode)
-	{
-		if (fwrite(&salt, 1, IVSIZE, out) != IVSIZE)
-		{
-			fclose(in);
-			fclose(out);
-			errno = -EIO;
-			return -EIO;
-		}
-		printf("Salt saved\n");
-	}
-	else
-	{
-		if (fread(&salt, 1, IVSIZE, in) != IVSIZE)
-		{
-			fclose(in);
-			fclose(out);
-			errno = -EIO;
-			return -EIO;
-		}
-		printf("Salt loaded\n");
-	}
-	Ring ring((const unsigned char*)key, strlen(key), (const unsigned char*)salt, IVSIZE, mutationIntervalInt);
 	struct stat st;
 	if (stat((const char*)inputFile, &st))
 	{
@@ -352,10 +330,50 @@ int main(int argc, char* argv[])
 		return errno;
 	}
 	unsigned int fileSize = st.st_size;
-	if (!encode)
+	if (encode)
 	{
-		fileSize -= IVSIZE;//exclude the salt
+		mutationIntervalInt = atoi(mutationInterval);
+		uint32_t mutationInterval32 = mutationIntervalInt;
+		if (fwrite(&mutationInterval32, 1, sizeof(mutationInterval32), out) != sizeof(mutationInterval32))
+		{
+			fclose(in);
+			fclose(out);
+			errno = EIO;
+			return -EIO;
+		}
+		if (fwrite(&salt, 1, IVSIZE, out) != IVSIZE)
+		{
+			fclose(in);
+			fclose(out);
+			errno = EIO;
+			return -EIO;
+		}
+		printf("Salt saved\n");
 	}
+	else
+	{
+		uint32_t mutationInterval32;
+		if (fread(&mutationInterval32, 1, sizeof(mutationInterval32), in) != sizeof(mutationInterval32))
+		{
+			fclose(in);
+			fclose(out);
+			errno = EIO;
+			return -EIO;
+		}
+		mutationIntervalInt = mutationInterval32;
+		fileSize -= sizeof(mutationInterval32);
+		printf("Mutationinterval loaded\n");
+		if (fread(&salt, 1, IVSIZE, in) != IVSIZE)
+		{
+			fclose(in);
+			fclose(out);
+			errno = EIO;
+			return -EIO;
+		}
+		fileSize -= IVSIZE;
+		printf("Salt loaded\n");
+	}
+	Ring ring((const unsigned char*)key, strlen(key), (const unsigned char*)salt, IVSIZE, mutationIntervalInt);
 	unsigned int readBytes = 0;
 	char buf[bufferInt];
 	char verboseMessage[1+8+1+6+1];
