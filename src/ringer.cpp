@@ -3,15 +3,9 @@
 #include <cstring>
 #include <cstdio>
 #include <cassert>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include "ring.hpp"
-#include <cstdint>
-
-#ifdef MULTICORE
-#include <pthread.h>
-#endif
+#include <stdint.h>
+#include <QFile>
 
 #define DEFAULTBUFFERSIZE 1024
 #define DEFAULTMUTATIONINTERVAL 16
@@ -225,35 +219,29 @@ int main(int argc, char* argv[])
 	}
 	if (keyFileSet)
 	{
-		FILE* in = fopen(keyFile, "r");
-		if (!in)
+		QFile in(keyFile);
+		if (!in.open(QIODevice::ReadOnly))
 		{
-			perror("ERROR: can not open keyfile");
-			return errno;
+			printf("ERROR: can not open keyfile\n");
+			errno = EIO;
+			return -errno;
 		}
-		struct stat st;
-		if (stat((const char*)keyFile, &st))
-		{
-			perror("ERROR: could not read filesize of keyfile");
-			fclose(in);
-			return errno;
-		}
-		unsigned int fileSize = st.st_size;
+		unsigned int fileSize = in.size();
 		if (fileSize > MAPSIZE)
 		{
 			printf("ERROR: keyfile is to large to contain a single key -> invalid\n");
-			fclose(in);
-			errno = -EMSGSIZE;
+			in.close();
+			errno = EMSGSIZE;
 			return -EMSGSIZE;
 		}
-		if (fread(&key, 1, fileSize, in) != fileSize)
+		if (in.read((char*)(&key), fileSize) != fileSize)
 		{
-			fclose(in);
-			errno = -EIO;
+			in.close();
+			errno = EIO;
 			return -EIO;
 		}
 		key[fileSize] = '\0';
-		fclose(in);
+		in.close();
 		printf("Password read from keyfile.\n");
 	}
 	if (!encode && !decode)
@@ -288,48 +276,40 @@ int main(int argc, char* argv[])
 	//setup
 	if (encode)
 	{
-		FILE* in = fopen("/dev/urandom", "r");
-		if (!in)
+		QFile in("/dev/urandom");
+		if (!in.open(QIODevice::ReadOnly))
 		{
-			perror("ERROR: can not open \"/dev/urandom\"");
+			printf("ERROR: can not open \"/dev/urandom\"\n");
+			errno = EIO;
 			return errno;
 		}
-		if (fread(&salt, 1, IVSIZE, in) != IVSIZE)
+		if (in.read((char*)(&salt), IVSIZE) != IVSIZE)
 		{
-			fclose(in);
-			errno = -EIO;
+			in.close();
+			errno = EIO;
 			return -EIO;
 		}
-		if (fclose(in))
-		{
-			perror("WARNING: could not close \"/dev/urandom\"");
-		}
+		in.close();
 		printf("Salt generated\n");
 	}
 	unsigned int bufferInt = atoi(buffer);
 	unsigned int mutationIntervalInt;
-	FILE* in = fopen(inputFile, "r");
-	if (!in)
+	QFile in(inputFile);
+	if (!in.open(QIODevice::ReadOnly))
 	{
-		perror("ERROR: can not open inputfile");
+		printf("ERROR: can not open inputfile\n");
+		errno = EIO;
+		return -errno;
+	}
+	QFile out(outputFile);
+	if (!in.open(QIODevice::WriteOnly))
+	{
+		printf("ERROR: can not open outputfile\n");
+		in.close();
+		errno = EIO;
 		return errno;
 	}
-	FILE* out = fopen(outputFile, "w");
-	if (!out)
-	{
-		perror("ERROR: can not open outputfile");
-		fclose(in);
-		return errno;
-	}
-	struct stat st;
-	if (stat((const char*)inputFile, &st))
-	{
-		perror("ERROR: could not read filesize of inputfile");
-		fclose(in);
-		fclose(out);
-		return errno;
-	}
-	unsigned int fileSize = st.st_size;
+	unsigned int fileSize = in.size();
 	if (encode)
 	{
 		mutationIntervalInt = atoi(mutationInterval);
@@ -355,8 +335,8 @@ int main(int argc, char* argv[])
 		uint32_t mutationInterval32;
 		if (fread(&mutationInterval32, 1, sizeof(mutationInterval32), in) != sizeof(mutationInterval32))
 		{
-			fclose(in);
-			fclose(out);
+			in.close();
+			out.close();
 			errno = EIO;
 			return -EIO;
 		}
@@ -365,8 +345,8 @@ int main(int argc, char* argv[])
 		printf("Mutationinterval loaded\n");
 		if (fread(&salt, 1, IVSIZE, in) != IVSIZE)
 		{
-			fclose(in);
-			fclose(out);
+			in.close();
+			out.close();
 			errno = EIO;
 			return -EIO;
 		}
@@ -435,14 +415,8 @@ int main(int argc, char* argv[])
 		}
 		printf("%s\n", verboseMessage);
 	}
-	if (fclose(in))
-	{
-		perror("WARNING: could not close inputfile");
-	}
-	if (fclose(out))
-	{
-		perror("WARNING: could not close outputfile");
-	}
+	in.close();
+	out.close();
 	if (removeSet)
 	{
 		if (remove(inputFile))
