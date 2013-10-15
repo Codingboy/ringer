@@ -314,17 +314,17 @@ int main(int argc, char* argv[])
 	{
 		mutationIntervalInt = atoi(mutationInterval);
 		uint32_t mutationInterval32 = mutationIntervalInt;
-		if (fwrite(&mutationInterval32, 1, sizeof(mutationInterval32), out) != sizeof(mutationInterval32))
+		if (out.write((const char*)(&mutationInterval32), sizeof(mutationInterval32)) != sizeof(mutationInterval32))
 		{
-			fclose(in);
-			fclose(out);
+			in.close();
+			out.close();
 			errno = EIO;
 			return -EIO;
 		}
-		if (fwrite(&salt, 1, IVSIZE, out) != IVSIZE)
+		if (out.write((const char*)(&salt), IVSIZE) != IVSIZE)
 		{
-			fclose(in);
-			fclose(out);
+			in.close();
+			out.close();
 			errno = EIO;
 			return -EIO;
 		}
@@ -333,7 +333,7 @@ int main(int argc, char* argv[])
 	else
 	{
 		uint32_t mutationInterval32;
-		if (fread(&mutationInterval32, 1, sizeof(mutationInterval32), in) != sizeof(mutationInterval32))
+		if (in.read((char*)(&mutationInterval32), sizeof(mutationInterval32)) != sizeof(mutationInterval32))
 		{
 			in.close();
 			out.close();
@@ -343,7 +343,7 @@ int main(int argc, char* argv[])
 		mutationIntervalInt = mutationInterval32;
 		fileSize -= sizeof(mutationInterval32);
 		printf("Mutationinterval loaded\n");
-		if (fread(&salt, 1, IVSIZE, in) != IVSIZE)
+		if (in.read((char*)(&salt), IVSIZE) != IVSIZE)
 		{
 			in.close();
 			out.close();
@@ -380,7 +380,7 @@ int main(int argc, char* argv[])
 		{
 			bytesToRead = fileSize - readBytes;
 		}
-		unsigned int readRet = fread(&buf, 1, bytesToRead, in);
+		unsigned int readRet = in.read((char*)(&buf), bytesToRead);
 		readBytes += readRet;
 #ifndef NDEBUG
 		assert(readRet == bytesToRead);
@@ -397,7 +397,7 @@ int main(int argc, char* argv[])
 		unsigned int writtenBytes = 0;
 		while (writtenBytes < readRet)
 		{
-			unsigned int writeRet = fwrite((&buf)+writtenBytes, 1, readRet, out);
+			unsigned int writeRet = out.write((const char*)((&buf)+writtenBytes), readRet);
 			writtenBytes += writeRet;
 		}
 	}
