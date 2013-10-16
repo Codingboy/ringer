@@ -9,7 +9,6 @@
 #define IVSIZE (1024)
 #endif
 
-//#define KNOWNPLAINTEXTATTACK
 //#define NDEBUG
 
 class Ring
@@ -80,23 +79,8 @@ class Ring
 		 * @post c contains decoded characters
 		 */
 		void decode(unsigned char* c, unsigned int length);
-#ifdef MULTICORE
-		/**
-		 * Mutates the map independent from the key.
-		 * This method is used to mutate the ring after mutationInterval operations.
-		 */
-		void shuffle();
-		unsigned int mutationInterval;
-		unsigned int operationsSinceMutation;
-#endif
-#ifdef KNOWNPLAINTEXTATTACK
-		unsigned char map[MAPSIZE];
-		unsigned char decodeMap[MAPSIZE];
-		bool mapSpecified[MAPSIZE];
-#endif
 	protected:
 		unsigned char last;
-#ifndef MULTICORE
 		/**
 		 * Mutates the map independent from the key.
 		 * This method is used to mutate the ring after mutationInterval operations.
@@ -104,17 +88,14 @@ class Ring
 		void shuffle();
 		unsigned int mutationInterval;
 		unsigned int operationsSinceMutation;
-#endif
 		/**
 		 * Mutates the map depending on the key.
 		 * This method is used to initialise the ring.
 		 * @deprecated This method is only in use for initialisation of the ring. All other mutations are done with shuffle() because this method needs to much time.
 		 */
 		void mutate();
-#ifndef KNOWNPLAINTEXTATTACK
 		unsigned char map[MAPSIZE];
 		unsigned char decodeMap[MAPSIZE];
-#endif
 		unsigned char pos[IVSIZE];
 		unsigned int posLength;
 		unsigned char initPos[IVSIZE];

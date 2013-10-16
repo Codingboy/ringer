@@ -26,77 +26,6 @@ Ring::Ring(const unsigned char* c, unsigned int length, const unsigned char* pos
 	}
 	this->pwLength = length;
 	reinit();
-#ifdef KNOWNPLAINTEXTATTACK
-for (unsigned int i=0; i<256; i++)
-{
-	mapSpecified[i] = true;
-}
-printf("map\n");
-for (int i=0; i<8; i++)
-{
-	for (int j=0; j<4; j++)
-	{
-		for (int k=0; k<8; k++)
-		{
-			if (map[i*4*8*1+j*8+k*1] < 100)
-			{
-				printf("0");
-				if (map[i*4*8*1+j*8+k*1] < 10)
-				{
-					printf("0");
-				}
-			}
-			printf("%u ", map[i*4*8*1+j*8+k*1]);
-		}
-		printf("    ");
-	}
-	printf("\n");
-}
-printf("\n");
-printf("decodemap\n");
-for (int i=0; i<8; i++)
-{
-	for (int j=0; j<4; j++)
-	{
-		for (int k=0; k<8; k++)
-		{
-			if (decodeMap[i*4*8*1+j*8+k*1] < 100)
-			{
-				printf("0");
-				if (decodeMap[i*4*8*1+j*8+k*1] < 10)
-				{
-					printf("0");
-				}
-			}
-			printf("%u ", decodeMap[i*4*8*1+j*8+k*1]);
-		}
-		printf("    ");
-	}
-	printf("\n");
-}
-printf("\n");
-printf("salt\n");
-for (int i=0; i<4; i++)
-{
-	for (int j=0; j<4; j++)
-	{
-		for (int k=0; k<8; k++)
-		{
-			if (pos[i*4*8*1+j*8+k*1] < 100)
-			{
-				printf("0");
-				if (pos[i*4*8*1+j*8+k*1] < 10)
-				{
-					printf("0");
-				}
-			}
-			printf("%u ", pos[i*4*8*1+j*8+k*1]);
-		}
-		printf("    ");
-	}
-	printf("\n");
-}
-#endif
 }
 
 Ring::~Ring()
@@ -219,12 +148,6 @@ unsigned char Ring::decode(unsigned char c)
 #endif
 	unsigned int posIndex = this->actualPos;
 	this->actualPos = (posIndex + 1)%this->posLength;
-#ifdef KNOWNPLAINTEXTATTACK
-	if (!mapSpecified[(c ^ this->last)%MAPSIZE])
-	{
-		return '?';
-	}
-#endif
 	unsigned char ret = (decodeMap[(c ^ this->last)%MAPSIZE] ^ this->pos[posIndex])%MAPSIZE;
 	this->pos[posIndex] = c;
 	if (this->mutationInterval != 0)
