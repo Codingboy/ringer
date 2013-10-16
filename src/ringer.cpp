@@ -302,7 +302,7 @@ int main(int argc, char* argv[])
 		return -errno;
 	}
 	QFile out(outputFile);
-	if (!in.open(QIODevice::WriteOnly))
+	if (!out.open(QIODevice::WriteOnly))
 	{
 		printf("ERROR: can not open outputfile\n");
 		in.close();

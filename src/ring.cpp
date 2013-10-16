@@ -123,7 +123,7 @@ void Ring::shuffle()
 {
 	for (unsigned int i=0; i<MAPSIZE; i++)
 	{
-		unsigned char index = this->map[i];
+		unsigned char index = (this->map[i] ^ this->pos[i%this->posLength])%MAPSIZE;
 		unsigned char tmp = this->map[index];
 		this->map[index] = this->map[i];
 		this->map[i] = tmp;
