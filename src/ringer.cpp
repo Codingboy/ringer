@@ -10,8 +10,18 @@
 #define DEFAULTBUFFERSIZE 1024
 #define DEFAULTMUTATIONINTERVAL 16
 
+#ifdef __linux__
+#define _GNU_SOURCE
+#include <sched.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+
 int main(int argc, char* argv[])
 {
+#ifdef __linux__
+	//int sched_setaffinity(getpid(), size_t cpusetsize, cpu_set_t *mask);
+#endif
 	char inputFile[256+1];
 	char outputFile[256+1];
 	char key[MAPSIZE+1];
