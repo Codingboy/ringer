@@ -6,8 +6,12 @@ TEMPLATE = app
 TARGET = bin/ringer
 DEPENDPATH += . include src
 INCLUDEPATH += . include
+INCLUDEPATH += /usr/include/cryptopp/
+INCLUDEPATH += /usr/include/ring/
+QMAKE_LIBDIR += /usr/lib/
+LIBS += -lring
+LIBS += -lcrypto++
 OBJECTS_DIR = obj
 
 # Input
-HEADERS += include/ring.hpp
-SOURCES += src/ring.cpp src/ringer.cpp
+SOURCES += src/ringer.cpp

@@ -3,9 +3,10 @@
 #include <cstring>
 #include <cstdio>
 #include <cassert>
-#include "ring.hpp"
+#include <ring.hpp>
 #include <stdint.h>
 #include <QFile>
+#include <osrng.h>
 
 #define DEFAULTBUFFERSIZE 1024
 #define DEFAULTMUTATIONINTERVAL 16
@@ -276,20 +277,8 @@ int main(int argc, char* argv[])
 	//setup
 	if (encode)
 	{
-		QFile in("/dev/urandom");
-		if (!in.open(QIODevice::ReadOnly))
-		{
-			printf("ERROR: can not open \"/dev/urandom\"\n");
-			errno = EIO;
-			return errno;
-		}
-		if (in.read((char*)(&salt), IVSIZE) != IVSIZE)
-		{
-			in.close();
-			errno = EIO;
-			return -EIO;
-		}
-		in.close();
+		CryptoPP::AutoSeededRandomPool rng;
+		rng.GenerateBlock((byte*)salt, IVSIZE);
 		printf("Salt generated\n");
 	}
 	unsigned int bufferInt = atoi(buffer);
