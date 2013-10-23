@@ -8,8 +8,12 @@ DEPENDPATH += . include src
 INCLUDEPATH += . include
 INCLUDEPATH += /usr/include/cryptopp/
 INCLUDEPATH += /usr/include/ring/
+INCLUDEPATH += /usr/include/sha/
+INCLUDEPATH += /usr/include/prng/
 QMAKE_LIBDIR += /usr/lib/
 LIBS += -lring
+LIBS += -lprng
+LIBS += -lsha
 LIBS += -lcrypto++
 OBJECTS_DIR = obj
 

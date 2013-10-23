@@ -6,7 +6,8 @@
 #include <ring.hpp>
 #include <stdint.h>
 #include <QFile>
-#include <osrng.h>
+#include <prng.hpp>
+#include <sha.hpp>
 
 #define DEFAULTBUFFERSIZE 1024
 #define DEFAULTMUTATIONINTERVAL 16
@@ -277,8 +278,8 @@ int main(int argc, char* argv[])
 	//setup
 	if (encode)
 	{
-		CryptoPP::AutoSeededRandomPool rng;
-		rng.GenerateBlock((byte*)salt, IVSIZE);
+		Prng prng;
+		prng.generate(salt, IVSIZE);
 		printf("Salt generated\n");
 	}
 	unsigned int bufferInt = atoi(buffer);
@@ -346,6 +347,11 @@ int main(int argc, char* argv[])
 	unsigned int readBytes = 0;
 	char buf[bufferInt];
 	char verboseMessage[1+8+1+6+1];
+	Sha sha;
+	if (!encode)
+	{
+		fileSize -= sha.size();
+	}
 
 	//encode/decode
 	while (readBytes < fileSize)
@@ -376,11 +382,13 @@ int main(int argc, char* argv[])
 #endif
 		if (encode)
 		{
+			sha.update(buf, readRet);
 			ring.encode((unsigned char*)buf, readRet);
 		}
 		else
 		{
 			ring.decode((unsigned char*)buf, readRet);
+			sha.update(buf, readRet);
 		}
 		//write
 		unsigned int writtenBytes = 0;
@@ -403,6 +411,21 @@ int main(int argc, char* argv[])
 			sprintf(verboseMessage, "\rdecoding %.1f%%", 100.0);
 		}
 		printf("%s\n", verboseMessage);
+	}
+	if (encode)
+	{
+		char hash[sha.size()];
+		sha.getHash(hash);
+		out.write(hash, sha.size());
+	}
+	else
+	{
+		char hash[sha.size()];
+		in.read(hash, sha.size());
+		if (!sha.matches(hash))
+		{
+			printf("WARNING: message was manipulated!\n");
+		}
 	}
 	in.close();
 	out.close();
